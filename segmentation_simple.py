@@ -53,9 +53,16 @@ def main():
     parser.add_argument('-p', '--port', type=int, help='OMERO server port')
     parser.add_argument('-u', '--username', help='OMERO username')
     parser.add_argument('-k', '--session_key', help='OMERO session key')
-    parser.add_argument('-d', '--debug', help='Turn on debugging')
     parser.add_argument(
-        '--save_rois', type=bool, default=False,
+        '-d', '--debug', action='store_true', default=False,
+        help='Turn on debugging'
+    )
+    parser.add_argument(
+        '--clear_rois', action='store_true', default=False,
+        help='Clear ROIs from the server for the object (object_id)'
+    )
+    parser.add_argument(
+        '--save_rois', action='store_true', default=False,
         help='Save ROIs to the server for the object (object_id)'
     )
     parser.add_argument(
@@ -122,6 +129,36 @@ def to_rois(result_array, pixels):
         rois.append(roi)
     return rois
 
+def clear_rois(client, pixels):
+    session = client.getSession()
+    query_service = session.getQueryService()
+    ctx = {'omero.group': '-1'}
+    params = omero.sys.ParametersI()
+    params.addId(pixels.image.id.val)
+    rois = query_service.findAllByQuery(
+        'select roi from Roi as roi ' \
+        'where roi.image.id = :id',
+        params, ctx
+    )
+    if len(rois) == 0:
+        return
+
+    do_all = omero.cmd.DoAll()
+    opts = None
+    do_all.requests = [omero.cmd.Delete('/Roi', v.id.val, opts) for v in rois]
+    handle = session.submit(do_all, ctx)
+    try:
+        loops = 10
+        ms = 1000
+        callback = omero.callbacks.CmdCallbackI(client, handle)
+        callback.loop(loops, ms)
+        response = callback.getResponse()
+        if isinstance(response, omero.cmd.ERR):
+            raise Exception(response)
+        print 'Clearing of ROIs successful!'
+    finally:
+        handle.close()
+
 def analyse(client, args):
     session = client.getSession()
     query_service = session.getQueryService()
@@ -139,7 +176,9 @@ def analyse(client, args):
             'where p.image.id = :id',
             params, ctx
         )
-    print pixels
+
+    if args.clear_rois:
+        clear_rois(client, pixels)
 
     pi = 3.14159265359
     img2ThreshVal = args.threshold
