@@ -93,6 +93,7 @@ def get_planes(session, pixels):
         for c in xrange(pixels.sizeC.val):
             plane = pixels_service.getPlane(0, c, 0)
             plane = np.fromstring(plane, dtype=dtype)
+            plane = np.reshape(plane, (pixels.sizeY.val, -1))
             if sys.byteorder == 'little':
                 # Data coming from OMERO is always big endian
                 plane = plane.byteswap()
