@@ -70,9 +70,10 @@ def main():
 def connect(args):
     client = omero.client(args.server, args.port)
     if args.username is not None:
-        client.createSession(args.username, args.password)
+        session = client.createSession(args.username, args.password)
     else:
-        client.joinSession(args.session_key)
+        session = client.joinSession(args.session_key)
+    print session.getAdminService().getEventContext().sessionUuid
     return client
 
 def analyse(client, args):
@@ -81,8 +82,18 @@ def analyse(client, args):
     omero_type, omero_id = args.object_id.split(':')
     omero_object = query_service.get(omero_type, omero_id)
 
+    ctx = {'omero.group': '-1'}
     if isinstance(omero_object, omero.model.Image):
-        pass
+        params = omero.sys.ParametersI()
+        params.addId(omero_id)
+        pixels = query_service.findByQuery(
+            'select p from Pixels as p ' \
+            'join fetch p.pixelsType '  \
+            'where p.image.id = :id',
+            params, ctx
+        )
+    print pixels
+
     pi = 3.14159265359
     img2ThreshVal = 0.7
     #Read-in images
