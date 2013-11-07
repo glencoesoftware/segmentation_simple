@@ -53,6 +53,7 @@ def main():
     parser.add_argument('-p', '--port', type=int, help='OMERO server port')
     parser.add_argument('-u', '--username', help='OMERO username')
     parser.add_argument('-k', '--session_key', help='OMERO session key')
+    parser.add_argument('-d', '--debug', help='Turn on debugging')
     parser.add_argument(
         '--threshold', type=float, default=0.7,
         help='Stain channel threshold'
