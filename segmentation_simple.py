@@ -55,6 +55,10 @@ def main():
     parser.add_argument('-k', '--session_key', help='OMERO session key')
     parser.add_argument('-d', '--debug', help='Turn on debugging')
     parser.add_argument(
+        '--save_rois', type=bool, default=False,
+        help='Save ROIs to the server for the object (object_id)'
+    )
+    parser.add_argument(
         '--threshold', type=float, default=0.7,
         help='Stain channel threshold'
     )
@@ -215,7 +219,8 @@ def analyse(client, args):
     print 'found %i cells, %i show collocalization' % (cellCounter, collocalizationCounter) 
 
     ctx = {'omero.group': str(pixels.details.group.id.val)}
-    update_service.saveArray(to_rois(resultArray[1:], pixels), ctx)
+    if args.save_rois:
+        update_service.saveArray(to_rois(resultArray[1:], pixels), ctx)
 
     with open('output.csv', 'wb') as f:
         writer = csv.writer(f)
