@@ -171,8 +171,6 @@ def analyse(client, args):
         if area > 3500: #and huge contours
             continue
         ellipse = cv2.fitEllipse(cnt)       #fit an ellipse: 1. to discribe the cell, 2. to filter out clusters
-        cv2.ellipse(imgAllContours, ellipse, (0,255,0),2)
-        cv2.drawContours(imgAllContours,cnt,-1,(255,0,0),2)
         r1, r2 = ellipse[1]
         ellipseArea = pi*0.5*r1*0.5*r2
         if ellipseArea > area + 0.1*area:  #ellipse fitted to the cluster usually has higher area then cluster itself
