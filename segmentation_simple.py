@@ -140,14 +140,6 @@ def analyse(client, args):
     cv2.threshold(img1_8bit, 2,4, cv2.THRESH_BINARY+cv2.THRESH_OTSU, img1Thresh)
     #find contours
     contoursCh1, hierarchyCh1 = cv2.findContours(img1Thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-    #images to store results
-    imgAllContours = cv2.cvtColor(img1_8bit, cv2.COLOR_GRAY2BGR)
-    imgResult = cv2.cvtColor(img1_8bit, cv2.COLOR_GRAY2BGR)
-    imgResultCh2 = cv2.cvtColor(img2_8bit, cv2.COLOR_GRAY2BGR)
-    #For compuation of mean intenisty (Channel1 and Channel2 together)
-    colorImg = np.zeros_like(imgAllContours)
-    colorImg[:,:,0] = img1_8bit
-    colorImg[:,:,1] = img2_8bit
     #Array holding analyis result
     resultArray = [];
     arrayRow = ['imageID', 'cellNumber', 'CX', 'CY', 'ellipseCX', 'ellipseCY', 
