@@ -33,14 +33,17 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import argparse
 import csv
-import numpy as np
-import cv2
+import sys
 import os
 
 from getpass import getpass
 
+import cv2
+import numpy as np
 import omero
 import omero.clients
+
+from omero.util.pixelstypetopython import toNumpy
 
 #from matplotlib import pyplot as plt
 #from scipy.ndimage import label
@@ -80,6 +83,24 @@ def connect(args):
     print session.getAdminService().getEventContext().sessionUuid
     return client
 
+def get_planes(session, pixels):
+    pixels_service = session.createRawPixelsStore()
+    planes = list()
+    dtype = toNumpy(pixels.pixelsType.value.val)
+    try:
+        ctx = {'omero.group': '-1'}
+        pixels_service.setPixelsId(pixels.id.val, True, ctx)
+        for c in xrange(pixels.sizeC.val):
+            plane = pixels_service.getPlane(0, c, 0)
+            plane = np.fromstring(plane, dtype=dtype)
+            if sys.byteorder == 'little':
+                # Data coming from OMERO is always big endian
+                plane = plane.byteswap()
+            planes.append(plane)
+    finally:
+        pixels_service.close()
+    return planes
+
 def analyse(client, args):
     session = client.getSession()
     query_service = session.getQueryService()
@@ -101,13 +122,9 @@ def analyse(client, args):
     pi = 3.14159265359
     img2ThreshVal = args.threshold
     #Read-in images
+    img1, img2 = get_planes(session, pixels)
 
-    dirPath =  '/Users/emilrozbicki/Documents/Data/JCB/team/plate 11001_Plate_136/TimePoint_1'
-    fileNameCh1 = 'plate 11001_A01_s1_w1.TIF'
-    fileNameCh2 = 'plate 11001_A01_s1_w2.TIF'
-    img1 = cv2.imread(os.path.join(dirPath, fileNameCh1), 2)
-    img2 = cv2.imread(os.path.join(dirPath, fileNameCh2), 2)
-    imageID = fileNameCh1
+    imageID = pixels.image.id.val
     #Convert to 8-bit
     img1f = img1.astype(float)
     img1f -= (img1.min())
