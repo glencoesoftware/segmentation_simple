@@ -43,6 +43,7 @@ import numpy as np
 import omero
 import omero.clients
 
+from omero.rtypes import rint, rdouble
 from omero.util.pixelstypetopython import toNumpy
 
 
@@ -99,9 +100,27 @@ def get_planes(session, pixels):
         pixels_service.close()
     return planes
 
+def to_rois(result_array, pixels):
+    unloaded_image = omero.model.ImageI(pixels.image.id, False)
+    rois = list()
+    for row in result_array:
+        cx = rdouble(float(row[2]))
+        cy = rdouble(float(row[3]))
+        roi = omero.model.RoiI()
+        shape = omero.model.PointI()
+        shape.theZ = rint(0)
+        shape.theT = rint(0)
+        shape.cx = cx
+        shape.cy = cy
+        roi.addShape(shape)
+        roi.image = unloaded_image
+        rois.append(roi)
+    return rois
+
 def analyse(client, args):
     session = client.getSession()
     query_service = session.getQueryService()
+    update_service = session.getUpdateService()
     omero_type, omero_id = args.object_id.split(':')
     omero_object = query_service.get(omero_type, omero_id)
 
@@ -193,6 +212,9 @@ def analyse(client, args):
         resultArray.append(arrayRow)
     
     print 'found %i cells, %i show collocalization' % (cellCounter, collocalizationCounter) 
+
+    ctx = {'omero.group': str(pixels.details.group.id.val)}
+    update_service.saveArray(to_rois(resultArray[1:], pixels), ctx)
 
     with open('output.csv', 'wb') as f:
         writer = csv.writer(f)
