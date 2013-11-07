@@ -135,11 +135,7 @@ def analyse(client, args):
     img2f -= (img1.min()+img2ThreshVal*img2.mean())
     img2_8bit = ((255. / (img2MaxVal - (img2.min()+img2ThreshVal*img2.mean()))) * img2f).astype(np.uint8)
 
-    #img1_8bit = np.uint8(img1_temp)
-    print img1_8bit.dtype, img1_8bit.max()
     img1Thresh = np.zeros(img1.shape,'uint8')
-    #cv2.convertScaleAbs(img1,img1_8bit,0.5,-50)
-    #cv2.convertScaleAbs(img2,img2_8bit,0.5,-50)
     #threshold images
     cv2.threshold(img1_8bit, 2,4, cv2.THRESH_BINARY+cv2.THRESH_OTSU, img1Thresh)
     #find contours
