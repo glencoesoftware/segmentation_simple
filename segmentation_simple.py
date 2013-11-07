@@ -45,9 +45,6 @@ import omero.clients
 
 from omero.util.pixelstypetopython import toNumpy
 
-#from matplotlib import pyplot as plt
-#from scipy.ndimage import label
-
 
 def main():
     parser = argparse.ArgumentParser()
@@ -208,19 +205,8 @@ def analyse(client, args):
         meanVal2[0], meanVal[0]*area, meanVal2[0]*area,minVal, minCx, minCy,
         maxVal, maxCx, maxCy,minVal2, minCx2, minCy2, maxVal2, maxCx2, maxCy2]
         resultArray.append(arrayRow)
-        #print arrayRow
-        if meanVal2[0] > 125:
-             cv2.ellipse(imgResult, ellipse, (0,0,255),-1)
-             collocalizationCounter += 1
-        cv2.ellipse(imgResult, ellipse, (0,255,0),2)
-        cv2.drawContours(imgResult,cnt,-1,(255,0,0),2)
-        cv2.drawContours(imgResultCh2,cnt,-1,(255,0,0),2)
     
-    print
     print 'found %i cells, %i show collocalization' % (cellCounter, collocalizationCounter) 
-    plt.subplot(121),plt.imshow(imgResult, 'gray'),plt.title('Ch1, blue - high intenisty in Ch2')
-    plt.subplot(122),plt.imshow(imgResultCh2, 'gray'),plt.title('Channel2')
-    plt.show()
 
     with open('output.csv', 'wb') as f:
         writer = csv.writer(f)
