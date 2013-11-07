@@ -53,6 +53,10 @@ def main():
     parser.add_argument('-u', '--username', help='OMERO username')
     parser.add_argument('-k', '--session_key', help='OMERO session key')
     parser.add_argument(
+        '--threshold', type=float, default=0.7,
+        help='Stain channel threshold'
+    )
+    parser.add_argument(
         'object_id',
         help='OMERO object or container to analyse (ex. Image:1)'
     )
@@ -95,7 +99,7 @@ def analyse(client, args):
     print pixels
 
     pi = 3.14159265359
-    img2ThreshVal = 0.7
+    img2ThreshVal = args.threshold
     #Read-in images
 
     dirPath =  '/Users/emilrozbicki/Documents/Data/JCB/team/plate 11001_Plate_136/TimePoint_1'
