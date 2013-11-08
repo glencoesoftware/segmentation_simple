@@ -203,8 +203,10 @@ def create_file_annotation():
     measurment.
     """
     file_annotation = FileAnnotationI()
+    #file_annotation.ns = \
+    #    rstring('openmicroscopy.org/omero/measurement')
     file_annotation.ns = \
-        rstring('openmicroscopy.org/omero/measurement')
+        rstring('openmicroscopy.org/omero/bulk_annotations')
     return file_annotation
 
 def get_table(client, plate_id):
@@ -358,7 +360,7 @@ def analyse_planes(client, args, table, file_annotation, image):
         columns_by_name['Image'].values.append(pixels.image.id.val)
         # Set Well column
         columns_by_name['Well'].values.append(
-            next(image.iterateWellSamples()).well.plate.id.val
+            next(image.iterateWellSamples()).well.id.val
         )
         for index, value in enumerate(arrayRow):
             columns[index + 3].values.append(float(value))
