@@ -32,6 +32,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 '''
 
 import argparse
+import logging
 import csv
 import sys
 import os
@@ -43,8 +44,15 @@ import numpy as np
 import omero
 import omero.clients
 
-from omero.rtypes import rint, rdouble
+from omero.grid import ImageColumn, WellColumn, RoiColumn, \
+                       LongColumn, DoubleColumn
+from omero.model import OriginalFileI, PlateI, PlateAnnotationLinkI, ImageI, \
+                        FileAnnotationI, RoiI, PointI
+from omero.rtypes import rint, rdouble, rstring
 from omero.util.pixelstypetopython import toNumpy
+
+
+log = logging.getLogger("gs.segmentation_simple")
 
 
 def main():
@@ -53,6 +61,11 @@ def main():
     parser.add_argument('-p', '--port', type=int, help='OMERO server port')
     parser.add_argument('-u', '--username', help='OMERO username')
     parser.add_argument('-k', '--session_key', help='OMERO session key')
+    parser.add_argument(
+        '-v', '--verbose', action='store_const', dest='logging_level',
+        const=logging.DEBUG, default=logging.INFO,
+        help='Enable more verbose logging'
+    )
     parser.add_argument(
         '-d', '--debug', action='store_true', default=False,
         help='Turn on debugging'
@@ -73,11 +86,14 @@ def main():
         'object_id',
         help='OMERO object or container to analyse (ex. Image:1)'
     )
+
     args = parser.parse_args()
     if args.username and args.session_key is None:
         args.password = getpass("OMERO password for '%s': " % args.username)
     elif args.username is None and args.session_key is None:
         parser.error('Username or session key must be provided!')
+    logging.basicConfig(level=args.logging_level)
+
     client = connect(args)
     try:
         analyse(client, args)
@@ -90,11 +106,13 @@ def connect(args):
         session = client.createSession(args.username, args.password)
     else:
         session = client.joinSession(args.session_key)
-    print session.getAdminService().getEventContext().sessionUuid
+    ec = session.getAdminService().getEventContext()
+    log.debug('Session key: %s' % ec.sessionUuid)
     return client
 
 def get_planes(session, pixels):
     pixels_service = session.createRawPixelsStore()
+
     planes = list()
     dtype = toNumpy(pixels.pixelsType.value.val)
     try:
@@ -112,26 +130,29 @@ def get_planes(session, pixels):
         pixels_service.close()
     return planes
 
-def to_rois(result_array, pixels):
-    unloaded_image = omero.model.ImageI(pixels.image.id, False)
+def to_rois(cx_column, cy_column, pixels, file_annotation):
+    unloaded_image = ImageI(pixels.image.id, False)
+    unloaded_file_annotation = FileAnnotationI(file_annotation.id.val, False)
     rois = list()
-    for row in result_array:
-        cx = rdouble(float(row[2]))
-        cy = rdouble(float(row[3]))
-        roi = omero.model.RoiI()
-        shape = omero.model.PointI()
+    for index in range(len(cx_column.values)):
+        cx = rdouble(cx_column.values[index])
+        cy = rdouble(cy_column.values[index])
+        roi = RoiI()
+        shape = PointI()
         shape.theZ = rint(0)
         shape.theT = rint(0)
         shape.cx = cx
         shape.cy = cy
         roi.addShape(shape)
         roi.image = unloaded_image
+        roi.linkAnnotation(unloaded_file_annotation)
         rois.append(roi)
     return rois
 
 def clear_rois(client, pixels):
     session = client.getSession()
     query_service = session.getQueryService()
+
     ctx = {'omero.group': '-1'}
     params = omero.sys.ParametersI()
     params.addId(pixels.image.id.val)
@@ -155,43 +176,131 @@ def clear_rois(client, pixels):
         response = callback.getResponse()
         if isinstance(response, omero.cmd.ERR):
             raise Exception(response)
-        print 'Clearing of ROIs successful!'
+        log.info('Clearing of %d ROIs successful!' % len(rois))
     finally:
         handle.close()
+
+def get_columns():
+    columns = [
+        ImageColumn('Image', '', list()),
+        RoiColumn('ROI', '', list()),
+        WellColumn('Well', '', list()),
+    ]
+    column_name = [
+        'cellNumber', 'CX', 'CY', 'ellipseCX', 'ellipseCY',
+        'polygonArea', 'ellipseArea', 'ellipseR1', 'ellipseR2',
+        'excentricity', 'orientation', 'meanCh1', 'meanCh2',
+        'totalIntCh1', 'totalIntCh2', 'minValCh1', 'minCX', 'minCY',
+        'maxValCh1', 'maxCX', 'maxCY','minValCh2', 'minCX2', 'minCY2',
+        'maxValCh2', 'maxCX2', 'maxCY2']
+    for name in column_name:
+        columns.append(DoubleColumn(name, '', list()))
+    return columns
+
+def create_file_annotation():
+    """
+    Creates a file annotation to represent a set of columns from our
+    measurment.
+    """
+    file_annotation = FileAnnotationI()
+    file_annotation.ns = \
+        rstring('openmicroscopy.org/omero/measurement')
+    return file_annotation
+
+def get_table(client, plate_id):
+    """Retrieves the OMERO.tables instance backing our results."""
+    # Create a new OMERO table to store our measurement results
+    session = client.getSession()
+    update_service = session.getUpdateService()
+    sr = session.sharedResources()
+
+    name = '/segmentation_simple.r5'
+    table = sr.newTable(1, name)
+    if table is None:
+        raise Exception(
+            "Unable to create table: %s" % name)
+
+    # Retrieve the original file corresponding to the table for the
+    # measurement, link it to the file annotation representing the
+    # umbrella measurement run, link the annotation to the plate from
+    # which it belongs and save the file annotation.
+    try:
+        table_original_file = table.getOriginalFile()
+        table_original_file_id = table_original_file.id.val
+        log.info("Created new table: %d" % table_original_file_id)
+        unloaded_o_file = OriginalFileI(table_original_file_id, False)
+        file_annotation = create_file_annotation()
+        file_annotation.file = unloaded_o_file
+        unloaded_plate = PlateI(plate_id, False)
+        plate_annotation_link = PlateAnnotationLinkI()
+        plate_annotation_link.parent = unloaded_plate
+        plate_annotation_link.child = file_annotation
+        plate_annotation_link = \
+            update_service.saveAndReturnObject(plate_annotation_link)
+        file_annotation = plate_annotation_link.child
+        table.initialize(get_columns())
+    except:
+        table.close()
+        raise
+    return (table, file_annotation)
+
+def get_image(client, image_id):
+    ctx = {'omero.group': '-1'}
+    session = client.getSession()
+    query_service = session.getQueryService()
+
+    params = omero.sys.ParametersI()
+    params.addId(image_id)
+    image = query_service.findByQuery(
+        'select i from Image as i ' \
+        'join fetch i.pixels as p ' \
+        'join fetch p.pixelsType ' \
+        'join fetch i.wellSamples as ws ' \
+        'join fetch ws.well as w ' \
+        'join fetch w.plate ' \
+        'where i.id = :id', params, ctx)
+    return image
 
 def analyse(client, args):
     session = client.getSession()
     query_service = session.getQueryService()
-    update_service = session.getUpdateService()
+
     omero_type, omero_id = args.object_id.split(':')
     omero_object = query_service.get(omero_type, omero_id)
 
     ctx = {'omero.group': '-1'}
     if isinstance(omero_object, omero.model.Image):
-        params = omero.sys.ParametersI()
-        params.addId(omero_id)
-        pixels = query_service.findByQuery(
-            'select p from Pixels as p ' \
-            'join fetch p.pixelsType '  \
-            'where p.image.id = :id',
-            params, ctx
-        )
+        image = get_image(client, omero_id)
+        pixels = image.getPrimaryPixels()
+        plate = next(image.iterateWellSamples()).well.plate
 
     if args.clear_rois:
         clear_rois(client, pixels)
+
+    table, file_annotation = get_table(client, plate.id.val)
+    try:
+        analyse_planes(client, args, table, file_annotation, image)
+    finally:
+        table.close()
+
+def analyse_planes(client, args, table, file_annotation, image):
+    session = client.getSession()
+    update_service = session.getUpdateService()
+    columns = table.getHeaders()
+    columns_by_name = dict([(v.name, v) for v in columns])
+    pixels = image.getPrimaryPixels()
 
     pi = 3.14159265359
     img2ThreshVal = args.threshold
     #Read-in images
     img1, img2 = get_planes(session, pixels)
 
-    imageID = pixels.image.id.val
     #Convert to 8-bit
     img1f = img1.astype(float)
     img1f -= (img1.min())
     img1_8bit = ((255. / (img1.max() - img1.min())) * img1f).astype(np.uint8)
     img2f = img2.astype(float)
-    print img2.max(), img2.min(), img2.mean()
+    log.debug('img2 max:%f min:%f mean:%f' % (img2.max(), img2.min(), img2.mean()))
     img2MaxVal = img2.max()
     if img2.max() < 400:
         img2MaxVal = 400
@@ -203,14 +312,6 @@ def analyse(client, args):
     cv2.threshold(img1_8bit, 2,4, cv2.THRESH_BINARY+cv2.THRESH_OTSU, img1Thresh)
     #find contours
     contoursCh1, hierarchyCh1 = cv2.findContours(img1Thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-    #Array holding analyis result
-    resultArray = [];
-    arrayRow = ['imageID', 'cellNumber', 'CX', 'CY', 'ellipseCX', 'ellipseCY', 
-        'polygonArea', 'ellipseArea', 'ellipseR1', 'ellipseR2', 'excentricity',
-        'orientation', 'meanCh1', 'meanCh2', 'totalIntCh1', 'totalIntCh2',
-        'minValCh1', 'minCX', 'minCY', 'maxValCh1', 'maxCX', 'maxCY','minValCh2',
-        'minCX2', 'minCY2', 'maxValCh2', 'maxCX2', 'maxCY2']
-    resultArray.append(arrayRow)
     #Indenified contour counter
     cellCounter = 0;
     collocalizationCounter = 0;
@@ -249,21 +350,41 @@ def analyse(client, args):
         minVal2, maxVal2, min_loc2, max_loc2 = cv2.minMaxLoc(img2,mask = mask)
         maxCx2, maxCy2 = max_loc2
         minCx2, minCy2 = min_loc2
-        arrayRow = [imageID, cellCounter, cx, cy, ellipseCx, ellipseCy, 
+        arrayRow = [cellCounter, cx, cy, ellipseCx, ellipseCy,
         moments['m00'], ellipseArea, r1, r2, excentricity,ellipse[2], meanVal[0],
         meanVal2[0], meanVal[0]*area, meanVal2[0]*area,minVal, minCx, minCy,
         maxVal, maxCx, maxCy,minVal2, minCx2, minCy2, maxVal2, maxCx2, maxCy2]
-        resultArray.append(arrayRow)
+        # Set Image column
+        columns_by_name['Image'].values.append(pixels.image.id.val)
+        # Set Well column
+        columns_by_name['Well'].values.append(
+            next(image.iterateWellSamples()).well.plate.id.val
+        )
+        for index, value in enumerate(arrayRow):
+            columns[index + 3].values.append(float(value))
     
-    print 'found %i cells, %i show collocalization' % (cellCounter, collocalizationCounter) 
+    log.info('Found %d cells, %d show collocalization' % (cellCounter, collocalizationCounter))
 
     ctx = {'omero.group': str(pixels.details.group.id.val)}
     if args.save_rois:
-        update_service.saveArray(to_rois(resultArray[1:], pixels), ctx)
+        roi_ids = update_service.saveAndReturnIds(
+            to_rois(
+                columns_by_name['CX'], columns_by_name['CY'], pixels,
+                file_annotation
+            ), ctx
+        )
+        for roi_id in roi_ids:
+            # Set ROI column for each cell
+            columns_by_name['ROI'].values.append(roi_id)
+
+    # Write new column data to OMERO.tables
+    table.addData(columns)
 
     with open('output.csv', 'wb') as f:
         writer = csv.writer(f)
-        writer.writerows(resultArray)
+        writer.writerow([v.name for v in columns])
+        for index in range(len(columns[0].values)):
+            writer.writerow([v.values[index] for v in columns])
 
 if __name__ == '__main__':
     main()
