@@ -352,7 +352,7 @@ def analyse(client, args):
     query_service = session.getQueryService()
 
     omero_type, omero_id = args.object_id.split(':')
-    omero_object = query_service.get(omero_type, omero_id)
+    omero_object = query_service.get(omero_type, long(omero_id))
 
     ctx = {'omero.group': '-1'}
     images = list()
