@@ -126,6 +126,10 @@ def script_main():
         scripts.List('IDs', optional=False, grouping='2',
                      description='List of object IDs').ofType(rlong(0)),
 
+        scripts.Bool('Debug', optional=False, grouping='3',
+                     description='Enable debugging?',
+                     default=False).ofType(rbool(False)),
+
         version='0.1',
         authors=['Emil Rozbicki', 'Chris Allan'],
         institutions=['Glencoe Software Inc.'],
@@ -133,18 +137,24 @@ def script_main():
     )
 
     try:
+        if client.getInput('Debug', unwrap=True):
+            logging.basicConfig(level=logging.DEBUG)
+        else:
+            logging.basicConfig(level=logging.INFO)
+
         script_params = dict()
         for key in client.getInputKeys():
             if client.getInput(key):
                 script_params[key] = client.getInput(key, unwrap=True)
+        log.debug('Script parameters: %r' % script_params)
 
-            class Arguments(object):
-                clear_rois = True
-                save_rois = True
-                threshold = DEFAULT_THRESHOLD
-                object_id = '%s:%s' % \
-                    (script_params['Data_Type'], script_params['IDs'])
-            analyse(client, Arguments())
+        class Arguments(object):
+            clear_rois = True
+            save_rois = True
+            threshold = DEFAULT_THRESHOLD
+            object_id = '%s:%s' % \
+                (script_params['Data_Type'], script_params['IDs'])
+        analyse(client, Arguments())
     finally:
         client.closeSession()
 
