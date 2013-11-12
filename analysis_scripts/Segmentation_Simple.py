@@ -161,7 +161,6 @@ def script_main():
             'Message',
             rstring('Segmentation of %s successful!' % args.object_id)
         )
-        client.setOutput("File_Annotation", robject(file_annotation))
     finally:
         client.closeSession()
 
