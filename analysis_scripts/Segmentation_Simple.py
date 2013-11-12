@@ -35,7 +35,6 @@ import argparse
 import logging
 import csv
 import sys
-import os
 
 from getpass import getpass
 
@@ -43,16 +42,17 @@ import cv2
 import numpy as np
 import omero
 import omero.clients
+import omero.scripts as scripts
 
 from omero.grid import ImageColumn, WellColumn, RoiColumn, \
-                       LongColumn, DoubleColumn
+                       DoubleColumn
 from omero.model import OriginalFileI, PlateI, PlateAnnotationLinkI, ImageI, \
                         FileAnnotationI, RoiI, PointI
-from omero.rtypes import rint, rdouble, rstring
+from omero.rtypes import rint, rlong, rdouble, rstring
 from omero.util.pixelstypetopython import toNumpy
 
 
-log = logging.getLogger("gs.segmentation_simple")
+log = logging.getLogger('gs.segmentation_simple')
 
 NS = 'openmicroscopy.org/omero/bulk_annotations'
 #NS = 'openmicroscopy.org/omero/measurement'
@@ -64,7 +64,9 @@ IMAGE_QUERY = 'select i from Image as i ' \
               'join fetch ws.well as w ' \
               'join fetch w.plate '
 
-def main():
+DEFAULT_THRESHOLD = 0.7
+
+def standalone_main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--server', help='OMERO server name')
     parser.add_argument('-p', '--port', type=int, help='OMERO server port')
@@ -88,7 +90,7 @@ def main():
         help='Save ROIs to the server for the object (object_id)'
     )
     parser.add_argument(
-        '--threshold', type=float, default=0.7,
+        '--threshold', type=float, default=DEFAULT_THRESHOLD,
         help='Stain channel threshold'
     )
     parser.add_argument(
@@ -106,6 +108,43 @@ def main():
     client = connect(args)
     try:
         analyse(client, args)
+    finally:
+        client.closeSession()
+
+def script_main():
+    dataTypes = [rstring('Plate'), rstring('Well'), rstring('Image')]
+
+    client = scripts.client(
+        'Segmentation_Simple.py',
+        'Simple segmentation on a given Plate, Well or Image',
+
+        scripts.String('Data_Type', optional=False, grouping='1',
+                       description='The data type you want to work with.',
+                       values=dataTypes,
+                       default='Plate'),
+
+        scripts.List('IDs', optional=False, grouping='2',
+                     description='List of object IDs').ofType(rlong(0)),
+
+        version='0.1',
+        authors=['Emil Rozbicki', 'Chris Allan'],
+        institutions=['Glencoe Software Inc.'],
+        contact='support@glencoesoftware.com',
+    )
+
+    try:
+        script_params = dict()
+        for key in client.getInputKeys():
+            if client.getInput(key):
+                script_params[key] = client.getInput(key, unwrap=True)
+
+            class Arguments(object):
+                clear_rois = True
+                save_rois = True
+                threshold = DEFAULT_THRESHOLD
+                object_id = '%s:%s' % \
+                    (script_params['Data_Type'], script_params['IDs'])
+            analyse(client, Arguments())
     finally:
         client.closeSession()
 
@@ -207,16 +246,16 @@ def get_columns():
     return columns
 
 def create_file_annotation():
-    """
+    '''
     Creates a file annotation to represent a set of columns from our
     measurment.
-    """
+    '''
     file_annotation = FileAnnotationI()
     file_annotation.ns = rstring(NS)
     return file_annotation
 
 def get_table(client, plate_id):
-    """Retrieves the OMERO.tables instance backing our results."""
+    '''Retrieves the OMERO.tables instance backing our results.'''
     session = client.getSession()
     query_service = session.getQueryService()
     sr = session.sharedResources()
@@ -236,12 +275,12 @@ def get_table(client, plate_id):
         file_annotation = next(plate.iterateAnnotationLinks()).child
         table_original_file_id = file_annotation.file.id.val
         table = sr.openTable(OriginalFileI(table_original_file_id, False))
-        log.info("Using existing table: %d" % table_original_file_id)
+        log.info('Using existing table: %d' % table_original_file_id)
         return (table, file_annotation)
     return create_table(client, plate_id)
 
 def create_table(client, plate_id):
-    """Create a new OMERO table to store our measurement results."""
+    '''Create a new OMERO table to store our measurement results.'''
     session = client.getSession()
     update_service = session.getUpdateService()
     sr = session.sharedResources()
@@ -250,7 +289,7 @@ def create_table(client, plate_id):
     table = sr.newTable(1, name)
     if table is None:
         raise Exception(
-            "Unable to create table: %s" % name)
+            'Unable to create table: %s' % name)
 
     # Retrieve the original file corresponding to the table for the
     # measurement, link it to the file annotation representing the
@@ -259,7 +298,7 @@ def create_table(client, plate_id):
     try:
         table_original_file = table.getOriginalFile()
         table_original_file_id = table_original_file.id.val
-        log.info("Created new table: %d" % table_original_file_id)
+        log.info('Created new table: %d' % table_original_file_id)
         unloaded_o_file = OriginalFileI(table_original_file_id, False)
         file_annotation = create_file_annotation()
         file_annotation.file = unloaded_o_file
@@ -428,4 +467,7 @@ def analyse_planes(client, args, table, file_annotation, image):
             writer.writerow([v.values[index] for v in columns])
 
 if __name__ == '__main__':
-    main()
+    if sys.argv[0] == 'script':
+        script_main()
+    else:
+        standalone_main()
