@@ -153,7 +153,7 @@ def script_main():
             save_rois = True
             threshold = DEFAULT_THRESHOLD
             object_id = '%s:%s' % \
-                (script_params['Data_Type'], script_params['IDs'])
+                (script_params['Data_Type'], script_params['IDs'].val)
         analyse(client, Arguments())
     finally:
         client.closeSession()
