@@ -54,6 +54,8 @@ from omero.util.pixelstypetopython import toNumpy
 
 log = logging.getLogger("gs.segmentation_simple")
 
+NS = 'openmicroscopy.org/omero/bulk_annotations'
+#NS = 'openmicroscopy.org/omero/measurement'
 
 def main():
     parser = argparse.ArgumentParser()
@@ -203,15 +205,36 @@ def create_file_annotation():
     measurment.
     """
     file_annotation = FileAnnotationI()
-    #file_annotation.ns = \
-    #    rstring('openmicroscopy.org/omero/measurement')
-    file_annotation.ns = \
-        rstring('openmicroscopy.org/omero/bulk_annotations')
+    file_annotation.ns = rstring(NS)
     return file_annotation
 
 def get_table(client, plate_id):
     """Retrieves the OMERO.tables instance backing our results."""
-    # Create a new OMERO table to store our measurement results
+    session = client.getSession()
+    query_service = session.getQueryService()
+    sr = session.sharedResources()
+    ctx = {'omero.group': '-1'}
+
+    params = omero.sys.ParametersI()
+    params.addString('ns', NS)
+    params.addId(plate_id)
+    plate = query_service.findByQuery(
+        'select p from Plate as p ' \
+        'join fetch p.annotationLinks as a_link ' \
+        'join fetch a_link.child as a ' \
+        'where a.ns = :ns and p.id = :id ',
+        params, ctx
+    )
+    if plate is not None:
+        file_annotation = next(plate.iterateAnnotationLinks()).child
+        table_original_file_id = file_annotation.file.id.val
+        table = sr.openTable(OriginalFileI(table_original_file_id, False))
+        log.info("Using existing table: %d" % table_original_file_id)
+        return (table, file_annotation)
+    return create_table(client, plate_id)
+
+def create_table(client, plate_id):
+    """Create a new OMERO table to store our measurement results."""
     session = client.getSession()
     update_service = session.getUpdateService()
     sr = session.sharedResources()
