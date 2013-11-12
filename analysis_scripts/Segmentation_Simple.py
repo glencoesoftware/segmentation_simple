@@ -128,7 +128,7 @@ def script_main():
 
         scripts.Bool('Debug', optional=False, grouping='3',
                      description='Enable debugging?',
-                     default=False).ofType(rbool(False)),
+                     default=False),
 
         version='0.1',
         authors=['Emil Rozbicki', 'Chris Allan'],
