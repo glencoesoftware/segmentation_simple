@@ -467,7 +467,7 @@ def analyse_planes(client, args, table, file_annotation, image):
             writer.writerow([v.values[index] for v in columns])
 
 if __name__ == '__main__':
-    if sys.argv[0] == 'script':
+    if sys.argv[0] == './script':
         script_main()
     else:
         standalone_main()
