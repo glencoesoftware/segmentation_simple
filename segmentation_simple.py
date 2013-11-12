@@ -313,8 +313,6 @@ def analyse(client, args):
         images.append(get_image(client, omero_id))
     plate = next(images[0].iterateWellSamples()).well.plate
 
-
-
     table, file_annotation = get_table(client, plate.id.val)
     try:
         for image in images:
