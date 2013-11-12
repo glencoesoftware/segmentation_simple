@@ -48,7 +48,7 @@ from omero.grid import ImageColumn, WellColumn, RoiColumn, \
                        DoubleColumn
 from omero.model import OriginalFileI, PlateI, PlateAnnotationLinkI, ImageI, \
                         FileAnnotationI, RoiI, PointI
-from omero.rtypes import rint, rlong, rdouble, rstring
+from omero.rtypes import rint, rlong, rdouble, rstring, robject
 from omero.util.pixelstypetopython import toNumpy
 
 
@@ -154,7 +154,14 @@ def script_main():
             threshold = DEFAULT_THRESHOLD
             object_id = '%s:%s' % \
                 (script_params['Data_Type'], script_params['IDs'][0])
-        analyse(client, Arguments())
+        args = Arguments()
+        file_annotation = analyse(client, args)
+
+        client.setOutput(
+            'Message',
+            rstring('Segmentation of %s successful!' % args.object_id)
+        )
+        client.setOutput("File_Annotation", robject(fileAnnotation))
     finally:
         client.closeSession()
 
@@ -372,6 +379,7 @@ def analyse(client, args):
             analyse_planes(client, args, table, file_annotation, image)
     finally:
         table.close()
+    return file_annotation
 
 def analyse_planes(client, args, table, file_annotation, image):
     session = client.getSession()
