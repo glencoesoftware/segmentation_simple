@@ -126,7 +126,15 @@ def script_main():
         scripts.List('IDs', optional=False, grouping='2',
                      description='List of object IDs').ofType(rlong(0)),
 
-        scripts.Bool('Debug', optional=False, grouping='3',
+        scripts.Bool('Clear_Existing_ROIs', optional=False, grouping='3',
+                     description='Enable debugging?',
+                     default=False),
+
+        scripts.Bool('Save_ROIs', optional=False, grouping='4',
+                     description='Enable debugging?',
+                     default=True),
+
+        scripts.Bool('Debug', optional=False, grouping='5',
                      description='Enable debugging?',
                      default=False),
 
@@ -149,8 +157,8 @@ def script_main():
         log.debug('Script parameters: %r' % script_params)
 
         class Arguments(object):
-            clear_rois = True
-            save_rois = True
+            clear_rois = script_params['Clear_Existing_ROIs']
+            save_rois = script_params['Save_ROIs']
             threshold = DEFAULT_THRESHOLD
             object_id = '%s:%s' % \
                 (script_params['Data_Type'], script_params['IDs'][0])
