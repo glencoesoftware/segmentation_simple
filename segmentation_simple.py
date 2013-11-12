@@ -57,6 +57,13 @@ log = logging.getLogger("gs.segmentation_simple")
 NS = 'openmicroscopy.org/omero/bulk_annotations'
 #NS = 'openmicroscopy.org/omero/measurement'
 
+IMAGE_QUERY = 'select i from Image as i ' \
+              'join fetch i.pixels as p ' \
+              'join fetch p.pixelsType ' \
+              'join fetch i.wellSamples as ws ' \
+              'join fetch ws.well as w ' \
+              'join fetch w.plate '
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--server', help='OMERO server name')
@@ -269,6 +276,17 @@ def create_table(client, plate_id):
         raise
     return (table, file_annotation)
 
+def get_images_by_well(client, image_id):
+    ctx = {'omero.group': '-1'}
+    session = client.getSession()
+    query_service = session.getQueryService()
+
+    params = omero.sys.ParametersI()
+    params.addId(image_id)
+    images = query_service.findAllByQuery(
+        IMAGE_QUERY + 'where w.id = :id', params, ctx)
+    return images
+
 def get_image(client, image_id):
     ctx = {'omero.group': '-1'}
     session = client.getSession()
@@ -277,13 +295,7 @@ def get_image(client, image_id):
     params = omero.sys.ParametersI()
     params.addId(image_id)
     image = query_service.findByQuery(
-        'select i from Image as i ' \
-        'join fetch i.pixels as p ' \
-        'join fetch p.pixelsType ' \
-        'join fetch i.wellSamples as ws ' \
-        'join fetch ws.well as w ' \
-        'join fetch w.plate ' \
-        'where i.id = :id', params, ctx)
+        IMAGE_QUERY + 'where i.id = :id', params, ctx)
     return image
 
 def analyse(client, args):
@@ -294,17 +306,23 @@ def analyse(client, args):
     omero_object = query_service.get(omero_type, omero_id)
 
     ctx = {'omero.group': '-1'}
+    images = list()
+    if isinstance(omero_object, omero.model.Well):
+        images = get_images_by_well(client, omero_id)
     if isinstance(omero_object, omero.model.Image):
-        image = get_image(client, omero_id)
-        pixels = image.getPrimaryPixels()
-        plate = next(image.iterateWellSamples()).well.plate
+        images.append(get_image(client, omero_id))
+    plate = next(images[0].iterateWellSamples()).well.plate
 
-    if args.clear_rois:
-        clear_rois(client, pixels)
+
 
     table, file_annotation = get_table(client, plate.id.val)
     try:
-        analyse_planes(client, args, table, file_annotation, image)
+        for image in images:
+            log.info('Analysing Image:%d' % image.id.val)
+            pixels = image.getPrimaryPixels()
+            if args.clear_rois:
+                clear_rois(client, pixels)
+            analyse_planes(client, args, table, file_annotation, image)
     finally:
         table.close()
 
