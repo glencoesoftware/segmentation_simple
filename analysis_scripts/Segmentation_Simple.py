@@ -145,6 +145,10 @@ def script_main():
                      description='Enable debugging?',
                      default=False),
 
+        scripts.Bool('Distribute', optional=False, grouping='6',
+                     description='Distribute?',
+                     default=False),
+
         version='0.1',
         authors=['Emil Rozbicki', 'Chris Allan'],
         institutions=['Glencoe Software Inc.'],
@@ -169,6 +173,7 @@ def script_main():
             threshold = DEFAULT_THRESHOLD
             object_id = '%s:%s' % \
                 (script_params['Data_Type'], script_params['IDs'][0])
+            distribute = script_params['Distribute']
         args = Arguments()
         analyse(client, args)
 
