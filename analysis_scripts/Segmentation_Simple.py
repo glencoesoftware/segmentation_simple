@@ -44,11 +44,10 @@ import omero
 import omero.clients
 import omero.scripts as scripts
 
-from omero.grid import ImageColumn, WellColumn, RoiColumn, \
-                       DoubleColumn
+from omero.grid import ImageColumn, WellColumn, RoiColumn, DoubleColumn
 from omero.model import OriginalFileI, PlateI, PlateAnnotationLinkI, ImageI, \
-                        FileAnnotationI, RoiI, PointI
-from omero.rtypes import rint, rlong, rdouble, rstring, robject
+    FileAnnotationI, RoiI, PointI
+from omero.rtypes import rint, rlong, rdouble, rstring
 from omero.util.pixelstypetopython import toNumpy
 
 
@@ -65,6 +64,7 @@ IMAGE_QUERY = 'select i from Image as i ' \
               'join fetch w.plate '
 
 DEFAULT_THRESHOLD = 0.7
+
 
 def standalone_main():
     parser = argparse.ArgumentParser()
@@ -163,7 +163,7 @@ def script_main():
             object_id = '%s:%s' % \
                 (script_params['Data_Type'], script_params['IDs'][0])
         args = Arguments()
-        file_annotation = analyse(client, args)
+        analyse(client, args)
 
         client.setOutput(
             'Message',
@@ -229,7 +229,7 @@ def clear_rois(client, pixels):
     params = omero.sys.ParametersI()
     params.addId(pixels.image.id.val)
     rois = query_service.findAllByQuery(
-        'select roi from Roi as roi ' \
+        'select roi from Roi as roi '
         'where roi.image.id = :id',
         params, ctx
     )
@@ -263,7 +263,7 @@ def get_columns():
         'polygonArea', 'ellipseArea', 'ellipseR1', 'ellipseR2',
         'excentricity', 'orientation', 'meanCh1', 'meanCh2',
         'totalIntCh1', 'totalIntCh2', 'minValCh1', 'minCX', 'minCY',
-        'maxValCh1', 'maxCX', 'maxCY','minValCh2', 'minCX2', 'minCY2',
+        'maxValCh1', 'maxCX', 'maxCY', 'minValCh2', 'minCX2', 'minCY2',
         'maxValCh2', 'maxCX2', 'maxCY2']
     for name in column_name:
         columns.append(DoubleColumn(name, '', list()))
@@ -289,9 +289,9 @@ def get_table(client, plate_id):
     params.addString('ns', NS)
     params.addId(plate_id)
     plate = query_service.findByQuery(
-        'select p from Plate as p ' \
-        'join fetch p.annotationLinks as a_link ' \
-        'join fetch a_link.child as a ' \
+        'select p from Plate as p '
+        'join fetch p.annotationLinks as a_link '
+        'join fetch a_link.child as a '
         'where a.ns = :ns and p.id = :id ',
         params, ctx
     )
@@ -364,11 +364,11 @@ def get_image(client, image_id):
 def analyse(client, args):
     session = client.getSession()
     query_service = session.getQueryService()
+    ctx = {'omero.group': '-1'}
 
     omero_type, omero_id = args.object_id.split(':')
-    omero_object = query_service.get(omero_type, long(omero_id))
+    omero_object = query_service.get(omero_type, long(omero_id), ctx)
 
-    ctx = {'omero.group': '-1'}
     images = list()
     if isinstance(omero_object, omero.model.Well):
         images = get_images_by_well(client, omero_id)
@@ -397,68 +397,73 @@ def analyse_planes(client, args, table, file_annotation, image):
 
     pi = 3.14159265359
     img2ThreshVal = args.threshold
-    #Read-in images
+    # Read-in images
     img1, img2 = get_planes(session, pixels)
 
-    #Convert to 8-bit
+    # Convert to 8-bit
     img1f = img1.astype(float)
     img1f -= (img1.min())
-    img1_8bit = ((255. / (img1.max() - img1.min())) * img1f).astype(np.uint8)
+    scale = 255.0 / (img1.max() - img1.min())
+    img1_8bit = (scale * img1f).astype(np.uint8)
     img2f = img2.astype(float)
-    log.debug('img2 max:%f min:%f mean:%f' % (img2.max(), img2.min(), img2.mean()))
-    img2MaxVal = img2.max()
-    if img2.max() < 400:
-        img2MaxVal = 400
-    img2f -= (img1.min()+img2ThreshVal*img2.mean())
-    img2_8bit = ((255. / (img2MaxVal - (img2.min()+img2ThreshVal*img2.mean()))) * img2f).astype(np.uint8)
+    img2f -= (img1.min() + img2ThreshVal * img2.mean())
 
-    img1Thresh = np.zeros(img1.shape,'uint8')
-    #threshold images
-    cv2.threshold(img1_8bit, 2,4, cv2.THRESH_BINARY+cv2.THRESH_OTSU, img1Thresh)
-    #find contours
-    contoursCh1, hierarchyCh1 = cv2.findContours(img1Thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-    #Indenified contour counter
-    cellCounter = 0;
-    collocalizationCounter = 0;
-    #Do the JOB!!!!
+    img1Thresh = np.zeros(img1.shape, 'uint8')
+    # threshold images
+    cv2.threshold(
+        img1_8bit, 2, 4, cv2.THRESH_BINARY + cv2.THRESH_OTSU, img1Thresh)
+    # find contours
+    contoursCh1, hierarchyCh1 = cv2.findContours(
+        img1Thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    # Indenified contour counter
+    cellCounter = 0
+    # Do the JOB!!!!
     for cnt in contoursCh1:
-        area = cv2.contourArea(cnt)  #get area
-        if area <500:   #remove all tiny contours
+        area = cv2.contourArea(cnt)  # get area
+        if area < 500:
+            # remove all tiny contours
             continue
-        if area > 3500: #and huge contours
+        if area > 3500:
+            # and huge contours
             continue
-        ellipse = cv2.fitEllipse(cnt)       #fit an ellipse: 1. to discribe the cell, 2. to filter out clusters
+        #fit an ellipse: 1. to discribe the cell, 2. to filter out clusters
+        ellipse = cv2.fitEllipse(cnt)
         r1, r2 = ellipse[1]
-        ellipseArea = pi*0.5*r1*0.5*r2
-        if ellipseArea > area + 0.1*area:  #ellipse fitted to the cluster usually has higher area then cluster itself
+        ellipseArea = pi * 0.5 * r1 * 0.5 * r2
+
+        if ellipseArea > area + 0.1*area:
+            # ellipse fitted to the cluster usually has higher area then
+            # cluster itself
             continue
-        #define mask for mean intensity computation    
-        mask = np.zeros(img1_8bit.shape,np.uint8)
-        cv2.drawContours(mask,[cnt],0,255,-1)
-        pixelpoints = np.transpose(np.nonzero(mask))
+        # define mask for mean intensity computation
+        mask = np.zeros(img1_8bit.shape, np.uint8)
+        cv2.drawContours(mask, [cnt], 0, 255, -1)
         if r1 > r2:
-            excentricity = r1/r2
+            excentricity = r1 / r2
         else:
-            excentricity = r2/r1
+            excentricity = r2 / r1
         if excentricity > 1.7:
             continue
         moments = cv2.moments(cnt)
         cellCounter += 1
-        cx = int(moments['m10']/moments['m00'])
-        cy = int(moments['m01']/moments['m00'])
+        cx = int(moments['m10'] / moments['m00'])
+        cy = int(moments['m01'] / moments['m00'])
         ellipseCx, ellipseCy = ellipse[0]
-        meanVal = cv2.mean(img1,mask = mask)
-        meanVal2 = cv2.mean(img2,mask = mask)
-        minVal, maxVal, min_loc, max_loc = cv2.minMaxLoc(img1,mask = mask)
+        meanVal = cv2.mean(img1, mask=mask)
+        meanVal2 = cv2.mean(img2, mask=mask)
+        minVal, maxVal, min_loc, max_loc = cv2.minMaxLoc(img1, mask=mask)
         maxCx, maxCy = max_loc
         minCx, minCy = min_loc
-        minVal2, maxVal2, min_loc2, max_loc2 = cv2.minMaxLoc(img2,mask = mask)
+        minVal2, maxVal2, min_loc2, max_loc2 = cv2.minMaxLoc(img2, mask=mask)
         maxCx2, maxCy2 = max_loc2
         minCx2, minCy2 = min_loc2
-        arrayRow = [cellCounter, cx, cy, ellipseCx, ellipseCy,
-        moments['m00'], ellipseArea, r1, r2, excentricity,ellipse[2], meanVal[0],
-        meanVal2[0], meanVal[0]*area, meanVal2[0]*area,minVal, minCx, minCy,
-        maxVal, maxCx, maxCy,minVal2, minCx2, minCy2, maxVal2, maxCx2, maxCy2]
+        arrayRow = [
+            cellCounter, cx, cy, ellipseCx, ellipseCy, moments['m00'],
+            ellipseArea, r1, r2, excentricity, ellipse[2],
+            meanVal[0], meanVal2[0], meanVal[0] * area, meanVal2[0] * area,
+            minVal, minCx, minCy, maxVal, maxCx, maxCy, minVal2,
+            minCx2, minCy2, maxVal2, maxCx2, maxCy2
+        ]
         # Set Image column
         columns_by_name['Image'].values.append(pixels.image.id.val)
         # Set Well column
@@ -467,9 +472,8 @@ def analyse_planes(client, args, table, file_annotation, image):
         )
         for index, value in enumerate(arrayRow):
             columns[index + 3].values.append(float(value))
-    
-    log.info('Found %d cells, %d show collocalization' % (cellCounter, collocalizationCounter))
 
+    log.info('Found %d cells!' % cellCounter)
     ctx = {'omero.group': str(pixels.details.group.id.val)}
     if args.save_rois:
         roi_ids = update_service.saveAndReturnIds(
