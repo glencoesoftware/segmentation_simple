@@ -66,6 +66,7 @@ IMAGE_QUERY = 'select i from Image as i ' \
 
 DEFAULT_THRESHOLD = 0.7
 
+LOGGING_FORMAT = '%(asctime)s %(levelname)-7s [%(name)16s] %(message)s'
 
 def standalone_main():
     parser = argparse.ArgumentParser()
@@ -110,7 +111,7 @@ def standalone_main():
         args.password = getpass("OMERO password for '%s': " % args.username)
     elif args.username is None and args.session_key is None:
         parser.error('Username or session key must be provided!')
-    logging.basicConfig(level=args.logging_level)
+    logging.basicConfig(format=LOGGING_FORMAT, level=args.logging_level)
 
     client = connect(args)
     try:
@@ -157,9 +158,9 @@ def script_main():
 
     try:
         if client.getInput('Debug', unwrap=True):
-            logging.basicConfig(level=logging.DEBUG)
+            logging.basicConfig(format=LOGGING_FORMAT, level=logging.DEBUG)
         else:
-            logging.basicConfig(level=logging.INFO)
+            logging.basicConfig(format=LOGGING_FORMAT, level=logging.INFO)
 
         script_params = dict()
         for key in client.getInputKeys():
