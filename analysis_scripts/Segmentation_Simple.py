@@ -33,6 +33,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import argparse
 import logging
+import pickle
 import csv
 import sys
 
@@ -46,7 +47,7 @@ import omero.scripts as scripts
 
 from omero.grid import ImageColumn, WellColumn, RoiColumn, DoubleColumn
 from omero.model import OriginalFileI, PlateI, PlateAnnotationLinkI, ImageI, \
-    FileAnnotationI, RoiI, PointI
+    FileAnnotationI, RoiI, PointI, WellI
 from omero.rtypes import rint, rlong, rdouble, rstring
 from omero.util.pixelstypetopython import toNumpy
 
@@ -69,7 +70,9 @@ DEFAULT_THRESHOLD = 0.7
 def standalone_main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--server', help='OMERO server name')
-    parser.add_argument('-p', '--port', type=int, help='OMERO server port')
+    parser.add_argument(
+        '-p', '--port', type=int, help='OMERO server port', default=4064
+    )
     parser.add_argument('-u', '--username', help='OMERO username')
     parser.add_argument('-k', '--session_key', help='OMERO session key')
     parser.add_argument(
@@ -92,6 +95,10 @@ def standalone_main():
     parser.add_argument(
         '--threshold', type=float, default=DEFAULT_THRESHOLD,
         help='Stain channel threshold'
+    )
+    parser.add_argument(
+        '--distribute', action='store_true', default=False,
+        help='Distribute!'
     )
     parser.add_argument(
         'object_id',
@@ -179,7 +186,9 @@ def connect(args):
     else:
         session = client.joinSession(args.session_key)
     ec = session.getAdminService().getEventContext()
-    log.debug('Session key: %s' % ec.sessionUuid)
+    session_key = ec.sessionUuid
+    log.debug('Session key: %s' % session_key)
+    args.session_key = session_key
     return client
 
 def get_planes(session, pixels):
@@ -202,9 +211,8 @@ def get_planes(session, pixels):
         pixels_service.close()
     return planes
 
-def to_rois(cx_column, cy_column, pixels, file_annotation):
+def to_rois(cx_column, cy_column, pixels):
     unloaded_image = ImageI(pixels.image.id, False)
-    unloaded_file_annotation = FileAnnotationI(file_annotation.id.val, False)
     rois = list()
     for index in range(len(cx_column.values)):
         cx = rdouble(cx_column.values[index])
@@ -217,7 +225,6 @@ def to_rois(cx_column, cy_column, pixels, file_annotation):
         shape.cy = cy
         roi.addShape(shape)
         roi.image = unloaded_image
-        roi.linkAnnotation(unloaded_file_annotation)
         rois.append(roi)
     return rois
 
@@ -361,6 +368,31 @@ def get_image(client, image_id):
         IMAGE_QUERY + 'where i.id = :id', params, ctx)
     return image
 
+def unit_of_work(args, image_id):
+    args = pickle.loads(args)
+    client = omero.client(args.server, args.port)
+    client.joinSession(args.session_key)
+    try:
+        image = get_image(client, image_id)
+        plate = next(image.iterateWellSamples()).well.plate
+        table, file_annotation = get_table(client, plate.id.val)
+        try:
+            analyse_image(client, args, table, image)
+        except:
+            log.error(
+                'Error while analysing Image:%d' % image.id.val,
+                exc_info=True
+            )
+        finally:
+            table.close()
+    except:
+        log.error(
+            'Error while preparing to analyse Image:%d' % image.id.val,
+            exc_info=True
+        )
+    finally:
+        client.closeSession()
+
 def analyse(client, args):
     session = client.getSession()
     query_service = session.getQueryService()
@@ -370,25 +402,39 @@ def analyse(client, args):
     omero_object = query_service.get(omero_type, long(omero_id), ctx)
 
     images = list()
-    if isinstance(omero_object, omero.model.Well):
+    if isinstance(omero_object, WellI):
         images = get_images_by_well(client, omero_id)
-    if isinstance(omero_object, omero.model.Image):
+    if isinstance(omero_object, ImageI):
         images.append(get_image(client, omero_id))
     plate = next(images[0].iterateWellSamples()).well.plate
 
     table, file_annotation = get_table(client, plate.id.val)
     try:
+        if args.distribute:
+            import omero.work
+            dist_args = [
+                [pickle.dumps(args), image.id.val] for image in images
+            ]
+            omero.work.distribute_func(
+                'Segmentation_Simple.unit_of_work',
+                dist_args
+            )
+            return file_annotation
+
         for image in images:
-            log.info('Analysing Image:%d' % image.id.val)
-            pixels = image.getPrimaryPixels()
-            if args.clear_rois:
-                clear_rois(client, pixels)
-            analyse_planes(client, args, table, file_annotation, image)
+            analyse_image(client, args, table, image)
     finally:
         table.close()
     return file_annotation
 
-def analyse_planes(client, args, table, file_annotation, image):
+def analyse_image(client, args, table, image):
+    log.info('Analysing Image:%d' % image.id.val)
+    pixels = image.getPrimaryPixels()
+    if args.clear_rois:
+        clear_rois(client, pixels)
+    analyse_planes(client, args, table, image)
+
+def analyse_planes(client, args, table, image):
     session = client.getSession()
     update_service = session.getUpdateService()
     columns = table.getHeaders()
@@ -478,8 +524,7 @@ def analyse_planes(client, args, table, file_annotation, image):
     if args.save_rois:
         roi_ids = update_service.saveAndReturnIds(
             to_rois(
-                columns_by_name['CX'], columns_by_name['CY'], pixels,
-                file_annotation
+                columns_by_name['CX'], columns_by_name['CY'], pixels
             ), ctx
         )
         for roi_id in roi_ids:
