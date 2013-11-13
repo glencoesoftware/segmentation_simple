@@ -346,13 +346,24 @@ def create_table(client, plate_id):
         raise
     return (table, file_annotation)
 
-def get_images_by_well(client, image_id):
+def get_images_by_plate(client, plate_id):
     ctx = {'omero.group': '-1'}
     session = client.getSession()
     query_service = session.getQueryService()
 
     params = omero.sys.ParametersI()
-    params.addId(image_id)
+    params.addId(plate_id)
+    images = query_service.findAllByQuery(
+        IMAGE_QUERY + 'where p.id = :id', params, ctx)
+    return images
+
+def get_images_by_well(client, well_id):
+    ctx = {'omero.group': '-1'}
+    session = client.getSession()
+    query_service = session.getQueryService()
+
+    params = omero.sys.ParametersI()
+    params.addId(well_id)
     images = query_service.findAllByQuery(
         IMAGE_QUERY + 'where w.id = :id', params, ctx)
     return images
@@ -402,6 +413,8 @@ def analyse(client, args):
     omero_object = query_service.get(omero_type, long(omero_id), ctx)
 
     images = list()
+    if isinstance(omero_object, PlateI):
+        images = get_images_by_plate(client, omero_id)
     if isinstance(omero_object, WellI):
         images = get_images_by_well(client, omero_id)
     if isinstance(omero_object, ImageI):
