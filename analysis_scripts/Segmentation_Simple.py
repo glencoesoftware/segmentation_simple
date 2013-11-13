@@ -193,11 +193,15 @@ def connect(args):
         session = client.createSession(args.username, args.password)
     else:
         session = client.joinSession(args.session_key)
-    client.enableKeepAlive(KEEP_ALIVE_INTERVAL)
+
     ec = session.getAdminService().getEventContext()
     session_key = ec.sessionUuid
     log.debug('Session key: %s' % session_key)
     args.session_key = session_key
+    old_client = client
+    client = old_client.createClient(secure=False)
+    old_client.__del__()
+    client.enableKeepAlive(KEEP_ALIVE_INTERVAL)
     return client
 
 def get_planes(session, pixels):
@@ -393,6 +397,9 @@ def unit_of_work(args, image_id):
     client = omero.client(args.server, args.port)
     session = client.joinSession(args.session_key)
     session.detachOnDestroy()
+    old_client = client
+    client = old_client.createClient(secure=False)
+    old_client.__del__()
     try:
         image = get_image(client, image_id)
         plate = next(image.iterateWellSamples()).well.plate
