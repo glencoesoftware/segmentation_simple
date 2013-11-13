@@ -68,6 +68,8 @@ DEFAULT_THRESHOLD = 0.7
 
 LOGGING_FORMAT = '%(asctime)s %(levelname)-7s [%(name)16s] %(message)s'
 
+KEEP_ALIVE_INTERVAL = 60  # 60 seconds
+
 def standalone_main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--server', help='OMERO server name')
@@ -191,6 +193,7 @@ def connect(args):
         session = client.createSession(args.username, args.password)
     else:
         session = client.joinSession(args.session_key)
+    client.enableKeepAlive(KEEP_ALIVE_INTERVAL)
     ec = session.getAdminService().getEventContext()
     session_key = ec.sessionUuid
     log.debug('Session key: %s' % session_key)
