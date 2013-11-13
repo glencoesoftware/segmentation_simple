@@ -388,7 +388,8 @@ def get_image(client, image_id):
 def unit_of_work(args, image_id):
     args = pickle.loads(args)
     client = omero.client(args.server, args.port)
-    client.joinSession(args.session_key)
+    session = client.joinSession(args.session_key)
+    session.detatchOnDestroy()
     try:
         image = get_image(client, image_id)
         plate = next(image.iterateWellSamples()).well.plate
@@ -430,6 +431,7 @@ def analyse(client, args):
     table, file_annotation = get_table(client, plate.id.val)
     try:
         if args.distribute:
+            session.detatchOnDestroy()
             import omero.work
             dist_args = [
                 [pickle.dumps(args), image.id.val] for image in images
