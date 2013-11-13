@@ -58,11 +58,11 @@ NS = 'openmicroscopy.org/omero/bulk_annotations'
 #NS = 'openmicroscopy.org/omero/measurement'
 
 IMAGE_QUERY = 'select i from Image as i ' \
-              'join fetch i.pixels as p ' \
+              'join fetch i.pixels ' \
               'join fetch p.pixelsType ' \
               'join fetch i.wellSamples as ws ' \
               'join fetch ws.well as w ' \
-              'join fetch w.plate '
+              'join fetch w.plate as p '
 
 DEFAULT_THRESHOLD = 0.7
 
