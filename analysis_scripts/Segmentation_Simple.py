@@ -59,7 +59,7 @@ NS = 'openmicroscopy.org/omero/bulk_annotations'
 
 IMAGE_QUERY = 'select i from Image as i ' \
               'join fetch i.pixels ' \
-              'join fetch p.pixelsType ' \
+              'join fetch pix.pixelsType pix ' \
               'join fetch i.wellSamples as ws ' \
               'join fetch ws.well as w ' \
               'join fetch w.plate as p '
