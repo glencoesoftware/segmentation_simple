@@ -121,9 +121,6 @@ def standalone_main():
     finally:
         client.closeSession()
 
-class Arguments(object):
-    pass
-
 def script_main():
     dataTypes = [rstring('Plate'), rstring('Well'), rstring('Image')]
 
@@ -173,7 +170,7 @@ def script_main():
                 script_params[key] = client.getInput(key, unwrap=True)
         log.debug('Script parameters: %r' % script_params)
 
-        args = Arguments()
+        args = argparse.Namespace()
         args.clear_rois = script_params['Clear_Existing_ROIs']
         args.save_rois = script_params['Save_ROIs']
         args.threshold = DEFAULT_THRESHOLD
