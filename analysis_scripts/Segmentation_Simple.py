@@ -170,7 +170,7 @@ def script_main():
                 script_params[key] = client.getInput(key, unwrap=True)
         log.debug('Script parameters: %r' % script_params)
 
-        ec = client.getAdminService().getEventContext()
+        ec = client.getSession().getAdminService().getEventContext()
         args = argparse.Namespace()
         properties = client.getProperties()
         args.server = client.getProperty('omero.host')
