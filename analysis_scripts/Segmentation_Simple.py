@@ -398,6 +398,8 @@ def get_image(client, image_id):
 
 def unit_of_work(args, image_id):
     args = pickle.loads(args)
+    log.debug('Joining %r:%r with session key %r' %
+              (args.server, args.port, args.session_key))
     client = omero.client(args.server, args.port)
     session = client.joinSession(args.session_key)
     session.detachOnDestroy()
