@@ -174,6 +174,8 @@ def script_main():
         args = argparse.Namespace()
         properties = client.getProperties()
         args.server = client.getProperty('omero.host')
+        if len(args.server) == 0:
+            args.server = 'localhost'
         args.port = client.getProperty('omero.port')
         args.session_key = ec.sessionUuid
         args.clear_rois = script_params['Clear_Existing_ROIs']
