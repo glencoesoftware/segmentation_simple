@@ -171,6 +171,9 @@ def script_main():
         log.debug('Script parameters: %r' % script_params)
 
         args = argparse.Namespace()
+        properties = client.getProperties()
+        args.server = client.getProperty('omero.host')
+        args.port = client.getProperty('omero.port')
         args.clear_rois = script_params['Clear_Existing_ROIs']
         args.save_rois = script_params['Save_ROIs']
         args.threshold = DEFAULT_THRESHOLD
