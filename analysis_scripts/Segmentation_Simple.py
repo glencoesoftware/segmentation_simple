@@ -99,10 +99,6 @@ def standalone_main():
         help='Stain channel threshold'
     )
     parser.add_argument(
-        '--distribute', action='store_true', default=False,
-        help='Distribute!'
-    )
-    parser.add_argument(
         'object_id',
         help='OMERO object or container to analyse (ex. Image:1)'
     )
@@ -181,7 +177,6 @@ def script_main():
         args.threshold = DEFAULT_THRESHOLD
         args.object_id = '%s:%s' % \
             (script_params['Data_Type'], script_params['IDs'][0])
-        args.distribute = script_params['Distribute']
         analyse(client, args)
 
         client.setOutput(
@@ -396,37 +391,6 @@ def get_image(client, image_id):
         IMAGE_QUERY + 'where i.id = :id', params, ctx)
     return image
 
-def unit_of_work(args, image_id):
-    args = pickle.loads(args)
-    log.debug('Joining %r:%r with session key %r' %
-              (args.server, args.port, args.session_key))
-    client = omero.client(args.server, args.port)
-    session = client.joinSession(args.session_key)
-    session.detachOnDestroy()
-    old_client = client
-    client = old_client.createClient(secure=False)
-    old_client.__del__()
-    try:
-        image = get_image(client, image_id)
-        plate = next(image.iterateWellSamples()).well.plate
-        table, file_annotation = get_table(client, plate.id.val)
-        try:
-            analyse_image(client, args, table, image)
-        except:
-            log.error(
-                'Error while analysing Image:%d' % image.id.val,
-                exc_info=True
-            )
-        finally:
-            table.close()
-    except:
-        log.error(
-            'Error while preparing to analyse Image:%d' % image.id.val,
-            exc_info=True
-        )
-    finally:
-        client.closeSession()
-
 def analyse(client, args):
     session = client.getSession()
     query_service = session.getQueryService()
@@ -446,18 +410,6 @@ def analyse(client, args):
 
     table, file_annotation = get_table(client, plate.id.val)
     try:
-        if args.distribute:
-            session.detachOnDestroy()
-            import omero.work
-            dist_args = [
-                [pickle.dumps(args), image.id.val] for image in images
-            ]
-            omero.work.distribute_func(
-                'Segmentation_Simple.unit_of_work',
-                dist_args
-            )
-            return file_annotation
-
         for image in images:
             analyse_image(client, args, table, image)
     finally:
