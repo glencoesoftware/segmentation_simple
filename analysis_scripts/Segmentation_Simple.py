@@ -171,7 +171,6 @@ def script_main():
 
         ec = client.getSession().getAdminService().getEventContext()
         args = argparse.Namespace()
-        properties = client.getProperties()
         args.server = client.getProperty('omero.host')
         if len(args.server) == 0:
             args.server = 'localhost'
