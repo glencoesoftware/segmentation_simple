@@ -34,7 +34,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import argparse
 import logging
 import pickle
-import csv
 import sys
 
 from getpass import getpass
@@ -572,12 +571,6 @@ def analyse_planes(client, args, table, image):
 
     # Write new column data to OMERO.tables
     table.addData(columns)
-
-    with open('output.csv', 'wb') as f:
-        writer = csv.writer(f)
-        writer.writerow([v.name for v in columns])
-        for index in range(len(columns[0].values)):
-            writer.writerow([v.values[index] for v in columns])
 
 if __name__ == '__main__':
     if sys.argv[0] == './script':
